@@ -176,7 +176,7 @@ export default {
      * GB28181扬声器开关
      **/
     async gbMusice () {
-      let id = this.userId.split('@')[1]
+      let id = this.data.userId.split('@')[1]
       let status = this.data.isVoice ? 0 : 1
       let curtime = Math.floor(Date.now() / 1000)
       let checksum = this.$store.getters.getChecksum(curtime)
@@ -200,7 +200,7 @@ export default {
      * GB28181麦克风开关
      **/
     async gbSpeak () {
-      let id = this.userId.split('@')[1]
+      let id = this.data.userId.split('@')[1]
       let status = this.data.isSpeak ? 0 : 1
       let curtime = Math.floor(Date.now() / 1000)
       let checksum = this.$store.getters.getChecksum(curtime)
@@ -247,6 +247,8 @@ export default {
         this.sipSpeak()
       } else if (this.data.type === 2) {
         this.H323Speak()
+      } else if (this.data.type === 3) {
+        this.gbSpeak()
       } else {
         this.$parent.$parent.sendMsg('MKF|' + this.data.userId)
       }
@@ -258,7 +260,9 @@ export default {
         this.sipMusice()
       } else if (this.data.type === 2) {
         this.H323Musice()
-      } else {
+      } else if (this.data.type === 3) {
+        this.gbMusice()
+      }  else {
         this.$parent.$parent.sendMsg('JY|' + this.data.userId)
       }
     }

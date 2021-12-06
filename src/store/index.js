@@ -9,8 +9,8 @@ const myStore = new Vuex.Store({
     APIKEY: '30c03c257db31df1095d72a383d2c8e2',
     APPSECRET: 'vYnDBokpF0XZL8Yt/ogiGNSv4gv4j6memk64Bu+35FZA+fIpGNYNJchUf98cwTqSmYAaCwq0GxAgk57cCuAXNhQze/9zTnzgefZEo6ZIWsSpLXA5itRjRd0R7Ju03OMPkUrSu5A33cWNEn8HYuwfndAK/8HtWoEcYAcFKYj+vAkBAAE=',
     APPID: 7296,
-    // APIURL: 'https://testsip.teampro.work'
-    APIURL: 'https://youmi.aqpsp.net'
+    APIURL: 'https://testsip.teampro.work'
+    // APIURL: 'https://youmi.aqpsp.net'
   },
   mutations: {
   },

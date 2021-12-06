@@ -15,7 +15,6 @@
         placeholder="输入关键字进行过滤"
         v-model="filterText">
       </el-input>
-
       <el-tree
         class="filter-tree"
         :data="personals"
@@ -23,8 +22,9 @@
         default-expand-all
         :filter-node-method="filterNode"
         ref="tree">
-        <div class="custom-tree-node" slot-scope="{ node, data }">
-            <span
+        <div class="custom-tree-node" slot-scope="{ node, data }" @dblclick="addMemeber(data)">
+
+          <span
               draggable="true"
               @dragend="dragend($event)"
               @dragstart="drag($event, data)">
@@ -150,6 +150,8 @@
     name: 'Index',
     data () {
       return {
+        isVAN: false,
+        mesg: null,
         allVoice: true,
         phoneShow: true,
         showQrCode: false,
@@ -184,7 +186,7 @@
             children: [
               {
                 name: 'ceshi29',
-                userId: 'ceshi29',
+                userId: 'sip:ceshi29@101.251.216.141',
                 type: 1,
                 isSpeak: true,
                 isCamera: true,
@@ -192,7 +194,8 @@
               },
               {
                 name: 'testWu',
-                userId: 'testWu@192.168.1.124',
+                userId: 'h323:testWu',
+                ip: '192.168.1.124',
                 type: 2,
                 isSpeak: true,
                 isCamera: true,
@@ -200,7 +203,7 @@
               },
               {
                 name: 'gb28181',
-                userId: 'gb28181:34020000001310000004@34020000001310000004',
+                userId: 'gb28181:34020000001310000005@34020000001310000005',
                 type: 3,
                 isSpeak: true,
                 isCamera: true,
@@ -257,8 +260,37 @@
             })
           }
         }
-
       },
+
+      /*
+      * 退出重新绑定流
+      **/
+
+      kictStream (userId) {
+        let index = this.memberIds.length - 1
+        this.memberIds.map((item, key) => {
+          if (item.userId == userId) {
+            index = key
+            this.memberIds.splice(key, 1)
+            this.$message({
+              type: 'warning',
+              message: item.name + '退出房间',
+              duration: 2000
+            })
+          }
+        })
+        this.getStreams(index)
+      },
+
+      getStreams (index) {
+        this.memberIds.map((item, key) => {
+          if (key >= index) {
+            this.getStream(key)
+          }
+        })
+      },
+
+
       /**
        * 获取登录者信息
        **/
@@ -410,7 +442,7 @@
       /**
        * H.323 呼叫
        */
-      async HcallPersonal (id) {
+      async HcallPersonal (name, ip) {
         // 34020000001310000001
         let curtime = Math.floor(Date.now() / 1000);
         let checksum = this.$store.getters.getChecksum(curtime)
@@ -425,7 +457,7 @@
           },
           data: {
             channel_id: this.roomId,
-            number: id,
+            number: name + '@' + ip,
           }
         })
 
@@ -477,18 +509,40 @@
       drop (number) {
         this.memberIds[number] = this.dragData
         console.log('拖拽后的数据', this.memberIds)
-        if (this.dragData.type === 1) {
-          // SIP拔号
-          this.callPersonal(this.dragData.userId)
-        } else if (this.dragData.type === 2) {
-          //h323拔号
-          this.HcallPersonal(this.dragData.userId)
-        } else if (this.dragData.type === 3) {
-          // 国标拔号
-          let arr = this.dragData.userId.split('@')
-          this.gbCallPersonal(arr[1])
+        this.addMemeber(this.dragData, true)
+      },
+
+      /**
+       * 双击呼叫
+       **/
+      addMemeber (data, drag = false) {
+        let flg = true
+
+        if (!drag) {
+          this.memberIds.map(item => {
+            if (item.userId === data.userId) {
+              flg = false
+            }
+          })
         }
-        this.$forceUpdate()
+
+        if (flg) {
+          if (!drag) {
+            this.memberIds.push(data)
+          }
+          if (data.type === 1) {
+            // SIP拔号
+            this.callPersonal(data.name)
+          } else if (data.type === 2) {
+            //h323拔号
+            this.HcallPersonal(data.name, data.ip)
+          } else if (data.type === 3) {
+            // 国标拔号
+            let arr = data.userId.split('@')
+            this.gbCallPersonal(arr[1])
+          }
+          this.$forceUpdate()
+        }
       },
 
       /**
@@ -571,6 +625,16 @@
         setTimeout(() => {
           this.useLocal()
         }, 500)
+        const u = navigator.userAgent
+        const app = navigator.appVersion
+        const isiOS = !!u.match(/\(i[^;]+;( U;)? CPU.+Mac OS X/) //ios终端
+        if (isiOS) {
+          setTimeout(() => {
+            this.windowNumber = this.windowNumber < 3 ? 3 : this.windowNumber
+            this.getMemberSteam()
+          }, 1000)
+        }
+
       },
 
       /**
@@ -644,26 +708,13 @@
               this.outRoom()
               this.$message.error('您被踢出房间了！')
             } else {
-              let index = this.memberIds.length - 1
-              this.memberIds.map((item, key) => {
-                if (item.userId == msgs[1]) {
-                  index = key
-                  this.memberIds.splice(key, 1)
-                }
-                if (index > key) {
-                  this.getStream(item.userId)
-                }
-              })
+              this.kictStream(msgs[1])
             }
           }
 
           // 主动退出
           if (msgs[0] == 'TC') {
-            this.memberIds.map((item, key) => {
-              if (item.userId == msgs[1]) {
-                this.memberIds.splice(key, 1)
-              }
-            })
+            this.kictStream(msgs[1])
           }
 
           // 麦克风
@@ -720,6 +771,49 @@
           // this.setUserInfo(userId, 'isVoice', true)
         })
 
+        this.rtc.on('room.others-speaker-on:*', (eventName, roomId, userId) => {
+          console.log('====>远端用户关闭扬声器', roomId, userId)
+          // this.setUserInfo(userId, 'isVoice', true)
+        })
+
+        // 事件监听：信令状态
+        this.rtc.on('signaling.status:*', (eventFullName, status) => {
+
+          if (status === 'reconnecting') {
+            this.isVAN = true
+            this.mesg = this.$message({
+              type: 'warning',
+              message: '网络已断开，正在尝试重新连接...',
+              duration: 0
+            })
+          }
+
+          if (status === 'connected') {
+            if (this.isVAN) {
+              this.getMemberSteam()
+              this.mesg.close()
+              this.mesg = this.$message({
+                type: 'success',
+                message: '网络连接成功',
+                duration: 2000
+              })
+              this.isVAN = false
+            }
+          }
+
+          if (status === 'error') {
+            if (this.isVAN) {
+              this.isVAN = false
+              this.mesg.close()
+            }
+            this.mesg = this.$message({
+              type: 'error',
+              message: '网络重新连接失败',
+              duration: 2000
+            })
+          }
+        })
+
         this.rtc.on('room.member-join:*', (eventFullName, roomId, memberId) => {
           console.log('=======>用户加入房间', roomId, memberId)
           if (memberId.indexOf('share_stream') > -1) {
@@ -730,6 +824,11 @@
               userId: memberId
             })
           }
+          console.log(this.memberIds.length, this.windowNumber)
+          // if (this.memberIds.length == this.windowNumber) {
+          //   this.windowNumber++
+          //   this.getMemberSteam()
+          // }
           // if (this.roomId == roomId) {
           this.rtc.requestUserStream(memberId).then( (stream) => {
             console.log('=======>用户加入', memberId, stream)
@@ -759,43 +858,49 @@
             member.isSpeak = true
             member.isCamera = true
             member.isVoice = true
+
+            let userid = member.userId
+            if (member.userId.indexOf('@') > -1) {
+              member.type = 1
+              userid = member.userId.substring(member.userId.indexOf(':') + 1, member.userId.indexOf('@'))
+            }
+            if (member.userId.indexOf('h323:') > -1) {
+              member.type = 2
+              userid = member.userId.replace('h323:', '')
+            }
+            if (member.userId.indexOf('gb28181') > -1) {
+              member.type = 3
+            }
+
             if (member.isJoin) {
-              let userid = member.userId
-              if (member.userId.indexOf('@') > -1) {
-                member.type = 1
-                userid = member.userId.substring(member.userId.indexOf(':') + 1, member.userId.indexOf('@'))
-              }
-              if (member.userId.indexOf('h323:') > -1) {
-                member.type = 2
-                userid = member.userId.replace('h323:', '')
-              }
-              if (member.userId.indexOf('gb28181') > -1) {
-                member.type = 3
-              }
               let flg = true
               this.memberIds.map(item => {
-                if (userid == item.name) {
-                  item.userId = member.userId
+                if (member.userId == item.userId) {
+                  // item.userId = member.userId
                   flg = false
                 }
               })
 
               if (flg) {
+                // member.name = member.name || member.userId
                 member.name = userid
                 this.memberIds.push(member)
               }
             } else {
-              this.memberIds.map((item, key) => {
-                if (item.userId == member.userId) {
-                  this.memberIds.splice(key, 1)
-                }
-              })
+
+              if (member.userId != member.name) {
+                this.kictStream(member.userId)
+              }
             }
             console.log('目前人员', this.memberIds)
           })
-
-          if (users.length > this.windowNumber) {
-            this.windowNumber = users.length
+          if (this.memberIds.length > this.windowNumber) {
+            if (users.length === 1) {
+              this.windowNumber++
+              this.getMemberSteam()
+            } else {
+              this.windowNumber = users.length
+            }
           }
           this.isFristLogin = false
           // }
